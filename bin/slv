@@ -1,0 +1,108 @@
+#!/usr/bin/env ruby
+# encoding: utf-8
+
+require 'gli'
+require 'fileutils'
+
+begin # XXX: Remove this begin/rescue before distributing your app
+require 'slv'
+rescue LoadError
+  STDERR.puts "In development, you need to use `bundle exec bin/slv` to run your app"
+  STDERR.puts "At install-time, RubyGems will make sure lib, etc. are in the load path"
+  STDERR.puts "Feel free to remove this message from bin/slv now"
+  exit 64
+end
+
+include GLI::App
+
+program_desc 'Службен Весник на РМ/RM Gazette grep tool'
+
+version SLV::VERSION
+
+desc 'Set archive dir'
+default_value SLV::ARC_DIR
+arg_name 'Archive directory'
+flag [:a, :'archive-dir']
+
+desc 'Set email address'
+default_value SLV::EMAIL_ADDR
+arg_name 'email address'
+flag [:e, :email]
+
+desc 'Describe archive here'
+arg_name 'Describe arguments to archive here'
+command :archive do |c|
+  c.desc 'Describe a switch to archive'
+  c.switch :s
+
+  c.desc 'Describe a flag to archive'
+  c.default_value 'default'
+  c.flag :f
+  c.action do |global_options,options,args|
+
+    # Your command logic here
+     
+    # If you have any errors, just raise them
+    # raise "that command made no sense"
+
+    puts "archive command ran"
+  end
+end
+
+desc 'Describe grep here'
+arg_name 'Describe arguments to grep here'
+command :grep do |c|
+  c.action do |global_options,options,args|
+    puts "grep command ran"
+  end
+end
+
+desc 'Describe notify here'
+arg_name 'Describe arguments to notify here'
+command :notify do |c|
+  c.action do |global_options,options,args|
+    puts "notify command ran"
+  end
+end
+
+pre do |global,command,options,args|
+  # Pre logic here
+  # Return true to proceed; false to abort and not call the
+  # chosen command
+  # Use skips_pre before a command to skip this block
+  # on that command only
+
+  # always create the arcive directory if non existing
+  unless Dir.exists? global[:a]
+    FileUtils.mkdir global[:a]
+    puts "ARC dir '#{global[:a]}' DOES NOT exists"
+  else
+    puts "ARC dir '#{global[:a]}' exists"
+  end
+  true
+end
+
+post do |global,command,options,args|
+  # Post logic here
+  # Use skips_post before a command to skip this
+  # block on that command only
+end
+
+on_error do |exception|
+  # Error logic here
+  # return false to skip default error handling
+  true
+end
+
+exit run(ARGV)
+
+__END__
+TODO:
+  - code executing prior ALL comands (including, help! and no command specified)
+  - exit codes 
+  - cucumber/aruba for all flags, config files, log files
+  - http sub-module/class
+  - arc using zippy
+  - notify
+  - ansi/colors
+

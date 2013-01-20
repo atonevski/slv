@@ -1,0 +1,6 @@
+# tempfiles
+/tmp
+
+# editor swap files
+*.swp
+*~

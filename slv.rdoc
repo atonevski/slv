@@ -1,0 +1,5 @@
+= slv
+
+Generate this with
+    slv rdoc
+After you have described your command line interface
