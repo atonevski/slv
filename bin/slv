@@ -3,6 +3,9 @@
 
 require 'gli'
 require 'fileutils'
+require 'zippy'
+require 'rainbow'
+
 
 begin # XXX: Remove this begin/rescue before distributing your app
 require 'slv'
@@ -19,6 +22,11 @@ program_desc 'Службен Весник на РМ/RM Gazette grep tool'
 
 version SLV::VERSION
 
+desc 'Set host name'
+default_value SLV::HOST # 'www.slvesnik.com.mk' # in futer use SLV::HOST
+arg_name 'Host name'
+flag [:h,:host]
+
 desc 'Set archive dir'
 default_value SLV::ARC_DIR
 arg_name 'Archive directory'
@@ -29,23 +37,83 @@ default_value SLV::EMAIL_ADDR
 arg_name 'email address'
 flag [:e, :email]
 
-desc 'Describe archive here'
-arg_name 'Describe arguments to archive here'
+desc 'The archive command handles zip archives with issues per year'
+arg_name '-l [year] | -a issue|from-to [year]'
 command :archive do |c|
-  c.desc 'Describe a switch to archive'
-  c.switch :s
+  c.desc 'List archive'
+  c.default_value Time.now.year
+  c.flag [:l, :list]
 
-  c.desc 'Describe a flag to archive'
-  c.default_value 'default'
-  c.flag :f
+  c.desc 'List archive in colums'
+  c.switch [:c, :columns]
+
+  c.desc 'Append issue(s) to archive'
+  c.switch [:a, :append]
+
   c.action do |global_options,options,args|
+    if options[:append]
+      # issue format: single or interval
+      year  = Time.now.year # default value
+      range = 1 .. 1
+      if args[0] =~ /^(\d+)$/
+        issue = Regexp.last_match[1].to_i
+        range = issue .. issue
+      elsif args[0] =~ /^(\d+)-(\d+)$/
+        range = Regexp.last_match[1].to_i .. Regexp.last_match[2].to_i
+      else
+        raise "Invalid issue argument (single_issue|from_to)"
+      end
+      year = args[1].to_i if args[1]
+      zip_file_name = File.join(global_options[:a], "#{year}.zip")
+      zip  = if File.exists? zip_file_name
+               Zippy.open(zip_file_name)
+              else
+                Zippy.create(zip_file_name)
+              end
+      range.each do |issue|
+        file_name = sprintf("%d-%03d.pdf", year, issue)
+        http = SLV::HTTP.new(global_options[:host])
+        pdf = http.get_issue(year, issue)
+        raise "Can't download issue #{year}-#{issue}" unless pdf
+        zip[file_name] = pdf # append/update issue in archive
+
+      end
+    elsif options[:list]
+      http = SLV::HTTP.new(global_options[:host])
+      issues = http.issues_for(options[:list])
+      raise "Error downloading issues for #{options[:list]}" unless issues
+      # 12345678901234567890
+      # yyyy-nnn.pdf_
+
+      COL = (options[:columns] ? 6 : 1)
+      output = []
+      total = issues.size - 1
+      ROW = total.div(COL) + (total % COL > 0 ? 1 : 0)
+      issues[1 .. -1].each_with_index do |issue, index|
+        file_name = sprintf("%d-%03d.pdf", options[:list], index+1)
+        zip_file_name = File.join(global_options[:a], "#{options[:list]}.zip")
+        col, row = index.divmod(ROW)
+        output[row] = [] if output[row].nil?
+        if issue.nil?
+          output[row][col] = space(12)
+        elsif File.exists?(File.join(global_options[:a], file_name))
+          output[row][col] = file_name.color(:green)
+        elsif File.exists?(zip_file_name) and 
+              Zippy.open(zip_file_name).to_a.include?(file_name)
+          output[row][col] = file_name.color(:yellow)
+        else
+          output[row][col] = file_name.color(:red)
+        end
+      end
+      output.each do |row|
+        puts (row.map {|e| e.nil? ? space(12) : e}.join(' '))
+      end
+    end
 
     # Your command logic here
      
     # If you have any errors, just raise them
     # raise "that command made no sense"
-
-    puts "archive command ran"
   end
 end
 
@@ -75,9 +143,9 @@ pre do |global,command,options,args|
   # always create the arcive directory if non existing
   unless Dir.exists? global[:a]
     FileUtils.mkdir global[:a]
-    puts "ARC dir '#{global[:a]}' DOES NOT exists"
+    # puts "ARC dir '#{global[:a]}' DOES NOT exists"
   else
-    puts "ARC dir '#{global[:a]}' exists"
+    # puts "ARC dir '#{global[:a]}' exists"
   end
   true
 end
@@ -94,6 +162,9 @@ on_error do |exception|
   true
 end
 
+# make sure the help command doesn't skip pre block]
+# DefaultHelpCommand.skips_pre = false
+
 exit run(ARGV)
 
 __END__
@@ -101,8 +172,11 @@ TODO:
   - code executing prior ALL comands (including, help! and no command specified)
   - exit codes 
   - cucumber/aruba for all flags, config files, log files
-  - http sub-module/class
-  - arc using zippy
   - notify
-  - ansi/colors
+  - prepare for git and github
+  - design SLV::HTTP.pdf_from_uri() and use it for the archive --append command
 
+DONE:
+  - http should have issues_for(year) method which returns array a[issue] = link  - prepare for cucumber/aruba
+  - added some ansi/colors for columnar archive list 
+  - arc using zippy
