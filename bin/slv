@@ -168,12 +168,54 @@ command :archive do |arc|
       end
       range.each do |issue|
         file_name = sprintf("%d-%03d.pdf", year, issue)
-        # pdf = http.get_issue(year, issue)
         raise "Issue #{year}-#{issue} missing" unless links[issue]
         zip.delete(file_name) if zip.to_a.include? file_name
       end
     end
+  end
 
+  arc.desc 'Extract issue(s)'
+  arc.long_desc <<-EOT
+    Extract issue(s) from archive into the archive directory.
+  EOT
+  arc.arg_name 'issue(s) [year]'
+  arc.command :extract do |ex|
+    # should check if archive doesn't exist -- if it doesn't exists then
+    # report 'nothing to do!'
+    ex.action do |global_options,options,args|
+      # issue foexat: single or interval
+      year  = Time.now.year # default value
+      range = 1 .. 1
+      if args[0] =~ /^(\d+)$/
+        issue = Regexp.last_match[1].to_i
+        range = issue .. issue
+      elsif args[0] =~ /^(\d+)-(\d+)$/
+        range = Regexp.last_match[1].to_i .. Regexp.last_match[2].to_i
+      else
+        raise "Invalid issue argument (single_issue|from-to)"
+      end
+      year = args[1].to_i if args[1]
+      zip_file_name = File.join(global_options[:a], "#{year}.zip")
+      zip  = if File.exists? zip_file_name
+               Zippy.open(zip_file_name)
+              else
+                puts "Nothing to do!"
+                exit 0
+              end
+      http  = SLV::HTTP.new(global_options[:host])
+      links = http.issues_for(year)
+      if links[range.begin].nil? or links[range.end].nil?
+        raise "Range (#{range.begin}..#{range.end}) error" 
+      end
+      range.each do |issue|
+        file_name = sprintf("%d-%03d.pdf", year, issue)
+        raise "Issue #{year}-#{issue} missing" unless links[issue]
+        if zip.to_a.include? file_name
+          path = File.join(global_options[:a], file_name)
+          File.open(path, 'w') { |fh| fh.write(zip[file_name]) }
+        end
+      end
+    end
   end
 
   arc.default_command :list
@@ -247,7 +289,7 @@ on_error do |exception|
 end
 
 # make sure the help command doesn't skip pre block]
-GLI::Commands::Help.skips_pre = false
+# GLI::Commands::Help.skips_pre = false
 
 exit run(ARGV)
 
@@ -257,7 +299,7 @@ TODO:
   - cucumber/aruba for all flags, config files, log files
   - notify
   - setup rspec for TDD
-  - 
+  - add the archive/extract command (same as delete) 
 
 DONE:
   - http should have issues_for(year) method which returns array a[issue] = link  - prepare for cucumber/aruba
@@ -269,5 +311,6 @@ DONE:
   - added git repository
   - code executing prior ALL comands (including, help): ceating the arc dir
   - implemented command nesting using command/subcommands gli's idioms
+
 
 
