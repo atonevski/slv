@@ -42,3 +42,10 @@ Rake::TestTask.new do |t|
 end
 
 task :default => [:test,:features]
+
+require 'rspec/core/rake_task'
+
+RSpec::Core::RakeTask.new(:spec) do |t|
+  t.pattern = Dir.glob('spec/**/*_spec.rb')
+  t.rspec_opts = '--format html --out=rspec.html --color'
+end

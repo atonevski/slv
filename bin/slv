@@ -37,21 +37,21 @@ default_value SLV::EMAIL_ADDR
 arg_name 'email address'
 flag [:e, :email]
 
-desc 'The archive command handles zip archives with issues per year'
-arg_name '-l [year] | -a issue|from-to [year]'
-command :archive do |c|
-  c.desc 'List archive'
-  c.default_value Time.now.year
-  c.flag [:l, :list]
-
-  c.desc 'List archive in colums'
-  c.switch [:c, :columns]
-
-  c.desc 'Append issue(s) to archive'
-  c.switch [:a, :append]
-
-  c.action do |global_options,options,args|
-    if options[:append]
+desc 'Archive issues per year'
+long_desc =<<-EOT
+  Archive handles issues zipped in yearly archives or unzipped in the archive 
+  directory. You can list and view issue location (unzipped, zipped, web).
+EOT
+arg_name 'Archive subcommand: list|add|remove (default is list)'
+command :archive do |arc|
+  arc.desc 'Add issue in archive'
+  arc.long_desc <<-EOT
+    This (sub)command adds spicified issue(s) in archive either using single
+    issue or range form. Default year is current year.
+  EOT
+  arc.arg_name 'issue(s) [year]'
+  arc.command :add do |add|
+    add.action do |global_options,options,args|
       # issue format: single or interval
       year  = Time.now.year # default value
       range = 1 .. 1
@@ -61,7 +61,7 @@ command :archive do |c|
       elsif args[0] =~ /^(\d+)-(\d+)$/
         range = Regexp.last_match[1].to_i .. Regexp.last_match[2].to_i
       else
-        raise "Invalid issue argument (single_issue|from_to)"
+        raise "Invalid issue argument (single_issue|from-to)"
       end
       year = args[1].to_i if args[1]
       zip_file_name = File.join(global_options[:a], "#{year}.zip")
@@ -70,18 +70,40 @@ command :archive do |c|
               else
                 Zippy.create(zip_file_name)
               end
+      http  = SLV::HTTP.new(global_options[:host])
+      links = http.issues_for(year)
+      if links[range.begin].nil? or links[range.end].nil?
+        raise "Range (#{range.begin}..#{range.end}) error" 
+      end
       range.each do |issue|
         file_name = sprintf("%d-%03d.pdf", year, issue)
-        http = SLV::HTTP.new(global_options[:host])
-        pdf = http.get_issue(year, issue)
+        # pdf = http.get_issue(year, issue)
+        raise "Issue #{year}-#{issue} doesn't exist" unless links[issue]
+        pdf = http.issue_from_link(links[issue])
         raise "Can't download issue #{year}-#{issue}" unless pdf
         zip[file_name] = pdf # append/update issue in archive
-
       end
-    elsif options[:list]
+    end
+  end
+
+  arc.desc 'List archive'
+  arc.long_desc <<-EOT
+    This (sub)command lists contents of zip archive. If issues are not present 
+    in the zip archive they are printed in red color on the console and/or 
+    using the '-' prefix. If cached (unzipped in the arc directory) they 
+    are printed in yellow color and/or using the '*' prefix. If present
+    in archive they are printed in green and/or using the '+' prefix.
+    If issue is in range but not present anywhere a '?' prefix is used.
+  EOT
+  arc.command :list do |ls|
+    ls.desc 'List archive in colums'
+    ls.switch [:c, :columns]
+    
+    ls.action do |global_options,options,args|
       http = SLV::HTTP.new(global_options[:host])
-      issues = http.issues_for(options[:list])
-      raise "Error downloading issues for #{options[:list]}" unless issues
+      year = (args[0] ? args[0].to_i : Time.now.year)
+      issues = http.issues_for(year)
+      raise "Error downloading issues for #{year}" unless issues
       # 12345678901234567890
       # yyyy-nnn.pdf_
 
@@ -90,39 +112,101 @@ command :archive do |c|
       total = issues.size - 1
       ROW = total.div(COL) + (total % COL > 0 ? 1 : 0)
       issues[1 .. -1].each_with_index do |issue, index|
-        file_name = sprintf("%d-%03d.pdf", options[:list], index+1)
-        zip_file_name = File.join(global_options[:a], "#{options[:list]}.zip")
+        file_name = sprintf("%d-%03d.pdf", year, index+1)
+        zip_file_name = File.join(global_options[:a], "#{year}.zip")
         col, row = index.divmod(ROW)
         output[row] = [] if output[row].nil?
         if issue.nil?
-          output[row][col] = space(12)
+          output[row][col] = (COL==1 ? '?' : '') + ' '*12
         elsif File.exists?(File.join(global_options[:a], file_name))
-          output[row][col] = file_name.color(:green)
+          output[row][col] = ((COL==1 ? '*' : '') + file_name).color(:cyan)
         elsif File.exists?(zip_file_name) and 
               Zippy.open(zip_file_name).to_a.include?(file_name)
-          output[row][col] = file_name.color(:yellow)
+          output[row][col] = ((COL==1 ? '+' : '') + file_name).color(:yellow)
         else
-          output[row][col] = file_name.color(:red)
+          output[row][col] = ((COL==1 ? '-' : '') + file_name).color(:red)
         end
       end
       output.each do |row|
-        puts (row.map {|e| e.nil? ? space(12) : e}.join(' '))
+        puts (row.map {|e| e.nil? ? ' '*12 : e}.join(' '))
+      end
+    end
+  end
+
+  arc.desc 'Remove issue(s)'
+  arc.long_desc <<-EOT
+    Remove issue(s) from archive
+  EOT
+  arc.arg_name 'issue(s) [year]'
+  arc.command :remove do |rm|
+    # should check if archive doesn't exist -- if it doesn't exists then
+    # report 'nothing to do!'
+    rm.action do |global_options,options,args|
+      # issue format: single or interval
+      year  = Time.now.year # default value
+      range = 1 .. 1
+      if args[0] =~ /^(\d+)$/
+        issue = Regexp.last_match[1].to_i
+        range = issue .. issue
+      elsif args[0] =~ /^(\d+)-(\d+)$/
+        range = Regexp.last_match[1].to_i .. Regexp.last_match[2].to_i
+      else
+        raise "Invalid issue argument (single_issue|from-to)"
+      end
+      year = args[1].to_i if args[1]
+      zip_file_name = File.join(global_options[:a], "#{year}.zip")
+      zip  = if File.exists? zip_file_name
+               Zippy.open(zip_file_name)
+              else
+                puts "Nothing to do!"
+                exit 0
+              end
+      http  = SLV::HTTP.new(global_options[:host])
+      links = http.issues_for(year)
+      if links[range.begin].nil? or links[range.end].nil?
+        raise "Range (#{range.begin}..#{range.end}) error" 
+      end
+      range.each do |issue|
+        file_name = sprintf("%d-%03d.pdf", year, issue)
+        # pdf = http.get_issue(year, issue)
+        raise "Issue #{year}-#{issue} missing" unless links[issue]
+        zip.delete(file_name) if zip.to_a.include? file_name
       end
     end
 
-    # Your command logic here
-     
-    # If you have any errors, just raise them
-    # raise "that command made no sense"
   end
+
+  arc.default_command :list
 end
 
-desc 'Describe grep here'
+desc 'Grep issues'
+long_desc =<<EOT
+  Grep issues with predefined regexps. You can list, add, remove, edit 
+  regexps for some topics.
+EOT
 arg_name 'Describe arguments to grep here'
-command :grep do |c|
-  c.action do |global_options,options,args|
-    puts "grep command ran"
+command :grep do |grep|
+  grep.desc 'List regexps'
+  grep.long_desc <<-EOT
+    List regexp for search throu the documents. 
+  EOT
+  grep.command :list do |ls|
+    ls.action do |global_options,options,args|
+      puts "grep list command ran"
+    end
   end
+
+  grep.desc 'Add regexps'
+  grep.long_desc <<-EOT
+    Add regexp for search throu the documents. 
+  EOT
+  grep.command :add do |add|
+    add.action do |global_options,options,args|
+      puts "grep add command ran"
+    end
+  end
+
+  grep.default_command :list
 end
 
 desc 'Describe notify here'
@@ -163,20 +247,27 @@ on_error do |exception|
 end
 
 # make sure the help command doesn't skip pre block]
-# DefaultHelpCommand.skips_pre = false
+GLI::Commands::Help.skips_pre = false
 
 exit run(ARGV)
 
 __END__
 TODO:
-  - code executing prior ALL comands (including, help! and no command specified)
   - exit codes 
   - cucumber/aruba for all flags, config files, log files
   - notify
-  - prepare for git and github
-  - design SLV::HTTP.pdf_from_uri() and use it for the archive --append command
+  - setup rspec for TDD
+  - 
 
 DONE:
   - http should have issues_for(year) method which returns array a[issue] = link  - prepare for cucumber/aruba
   - added some ansi/colors for columnar archive list 
   - arc using zippy
+  - added SLV::HTTP.issue_from_link() and use it for the archive --append command
+  - added '?', '*', '+', '-' prefix in one column output for archive --list [year] command for
+    ?=non-existent issue, *=unzipped in arc dir, +=present in zip file, -=missing (to be downloaded)
+  - added git repository
+  - code executing prior ALL comands (including, help): ceating the arc dir
+  - implemented command nesting using command/subcommands gli's idioms
+
+

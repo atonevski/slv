@@ -8,5 +8,5 @@ Feature: My bootstrapped app kinda works
     Then the exit status should be 0
 
   Scenario: The archive directory always exists in the home directory by default.
-    When I successfully run `slv archive` 
+    When I run `slv help` 
     Then archive directory should exist in my home directory

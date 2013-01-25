@@ -44,7 +44,7 @@ module SLV
       end
     end
 
-    # returns arr of issues uris
+    # returns arr of issues links
     def issues_for(year)
       path = "/besplatni-izdanija.nspx?pYear=#{year}"
       response = @http.get(path)
@@ -68,5 +68,16 @@ module SLV
       results
     end
 
+    # get pdf from link
+    def issue_from_link(link)
+      uri = URI.parse(link)
+      http = Net::HTTP.new(uri.host)
+      response = http.get(uri.path)
+      if response.code == '200'
+        return response.body.dup
+      else
+        return nil
+      end
+    end
   end
 end
