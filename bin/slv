@@ -299,7 +299,6 @@ TODO:
   - cucumber/aruba for all flags, config files, log files
   - notify
   - setup rspec for TDD
-  - add the archive/extract command (same as delete) 
 
 DONE:
   - http should have issues_for(year) method which returns array a[issue] = link  - prepare for cucumber/aruba
@@ -311,6 +310,7 @@ DONE:
   - added git repository
   - code executing prior ALL comands (including, help): ceating the arc dir
   - implemented command nesting using command/subcommands gli's idioms
+  - add the archive/extract command (same as delete) 
 
 
 

@@ -49,7 +49,7 @@ Then /^the list of archive "(.*?)" should contain "(.*?)" issues$/ do |year, tot
 end
 
 
-Given /^issues "(.*?)"\-"(.*?)" for archive "(.*?)" does not exist in the default archive directory$/  do |from, to, year|
+Given /^issues "(.*?)"\-"(.*?)" for archive "(.*?)" do not exist in the default archive directory$/  do |from, to, year|
   
   (from .. to).each do |issue| 
     file_name = sprintf("%d-%03d.pdf", year, issue) 

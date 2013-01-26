@@ -14,8 +14,8 @@ Feature: SLV uses zip archives
     And I successfully run `slv archive list 2010`
     Then the stdout should contain "+2010-001.pdf"
 
-  Scenario: Adding range of issues to an archive
-    Given issues "100"-"101" for archive "2010" does not exist in the default archive directory
+  Scenario: Adding range of issues to archive
+    Given issues "100"-"101" for archive "2010" do not exist in the default archive directory
     When I successfully run `slv archive add 100-101 2010`
     And I successfully run ` slv archive list 2010`
     Then issues "100"-"101" for archive "2010" have prefix "+"
@@ -26,10 +26,26 @@ Feature: SLV uses zip archives
     And I successfully run `slv archive list 2010`
     Then the stdout should contain "-2010-001.pdf"
 
+  Scenario: Removing range of issues from archive
+    Given issues "90"-"92" for archive "2010" do not exist in the default archive directory
+    When I successfully run `slv archive add 90-92 2010`
+    And I successfully run `slv archive remove 91-92 2010`
+    And I successfully run `slv archive list 2010`
+    Then issues "91"-"92" for archive "2010" have prefix "-"
+    And the stdout should contain "+2010-090.pdf"
+
   Scenario: Extracting a single issue from archive
     Given issue "1" does exists in archive "2010"
     When I successfully run `slv archive extract 1 2010`
     Then issue "1" from archive "2010" exists in the default archive directory
+
+  Scenario: Extracting a range of issues from archive
+    Given issues "95"-"96" for archive "2010" do not exist in the default archive directory
+    When I successfully run `slv archive add 95-96 2010`
+    And I successfully run `slv archive extract 96-96 2010`
+    And I successfully run `slv archive list 2010`
+    Then issues "96"-"96" for archive "2010" have prefix "*"
+    And the stdout should contain "+2010-095.pdf"
 
   Scenario: Listing an archive
     When I successfully run `slv archive list 2010`
