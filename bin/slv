@@ -119,7 +119,7 @@ command :archive do |arc|
         if issue.nil?
           output[row][col] = (COL==1 ? '?' : '') + ' '*12
         elsif File.exists?(File.join(global_options[:a], file_name))
-          output[row][col] = ((COL==1 ? '*' : '') + file_name).color(:cyan)
+          output[row][col] = ((COL==1 ? '*' : '') + file_name).color(:green)
         elsif File.exists?(zip_file_name) and 
               Zippy.open(zip_file_name).to_a.include?(file_name)
           output[row][col] = ((COL==1 ? '+' : '') + file_name).color(:yellow)
@@ -221,34 +221,70 @@ command :archive do |arc|
   arc.default_command :list
 end
 
-desc 'Grep issues'
+desc 'Grep issue(s)'
 long_desc =<<EOT
-  Grep issues with predefined regexps. You can list, add, remove, edit 
-  regexps for some topics.
+  Search issue(s) for a phrase. Issue(s) is in a 
+  single or range format. Year is optional (default is current year).
+  Phrase is regular expression. Always add issue in zip archive
+  if not present.
 EOT
-arg_name 'Describe arguments to grep here'
+arg_name 'issue(s) [year] regexp'
 command :grep do |grep|
-  grep.desc 'List regexps'
-  grep.long_desc <<-EOT
-    List regexp for search throu the documents. 
-  EOT
-  grep.command :list do |ls|
-    ls.action do |global_options,options,args|
-      puts "grep list command ran"
+  grep.action do |global_options,options,args|
+
+    range = 1 .. 1
+    if args[0] =~ /^(\d+)$/
+      issue = Regexp.last_match[1].to_i
+      range = issue .. issue
+    elsif args[0] =~ /^(\d+)-(\d+)$/
+      range = Regexp.last_match[1].to_i .. Regexp.last_match[2].to_i
+    else
+      raise "Invalid issue argument (single_issue|from-to)"
+    end
+
+    year  = Time.now.year # default value
+    re    = nil
+    if args.size == 3
+      year = args[1].to_i
+      re = %r{#{args[2]}}i
+    else
+      re = %r{#{args[1]}}i
+    end
+      
+    year = args[1].to_i if args[1]
+    zip_file_name = File.join(global_options[:a], "#{year}.zip")
+    zip  = if File.exists? zip_file_name
+              Zippy.open(zip_file_name)
+            else
+              Zippy.create(zip_file_name)
+            end
+    http  = SLV::HTTP.new(global_options[:host])
+    links = http.issues_for(year)
+    if links[range.begin].nil? or links[range.end].nil?
+      raise "Range (#{range.begin}..#{range.end}) error" 
+    end
+    range.each do |issue|
+      file_name = sprintf("%d-%03d.pdf", year, issue)
+      raise "Issue #{year}-#{issue} missing" unless links[issue]
+      path = File.join(global_options[:a], file_name)
+      if File.exists? path
+        # cache ...
+        results = SLV.grep(path, re)
+        puts "*#{file_name}(#{re.to_s}): #{results.join(', ')}".color(:green)
+      elsif zip.to_a.include? file_name
+        # zip...
+        pdf = zip[file_name]
+        results = SLV.grep(pdf, re)
+        puts "+#{file_name}(#{re.to_s}): #{results.join(', ')}".color(:yellow)
+      else
+        # fetch from web and add to zip
+        pdf = http.issue_from_link(links[issue])
+        zip[file_name] = pdf
+        results = SLV.grep(pdf, re)
+        puts "-#{file_name}(#{re.to_s}): #{results.join(', ')}".color(:red)
+      end
     end
   end
-
-  grep.desc 'Add regexps'
-  grep.long_desc <<-EOT
-    Add regexp for search throu the documents. 
-  EOT
-  grep.command :add do |add|
-    add.action do |global_options,options,args|
-      puts "grep add command ran"
-    end
-  end
-
-  grep.default_command :list
 end
 
 desc 'Describe notify here'
@@ -298,7 +334,9 @@ TODO:
   - exit codes 
   - cucumber/aruba for all flags, config files, log files
   - notify
-  - setup rspec for TDD
+  - grep command: grep 'expression' issue(s) [year]: should fetch: 1st from dir, then from zip, lastly
+    from web
+  - 
 
 DONE:
   - http should have issues_for(year) method which returns array a[issue] = link  - prepare for cucumber/aruba
@@ -311,6 +349,7 @@ DONE:
   - code executing prior ALL comands (including, help): ceating the arc dir
   - implemented command nesting using command/subcommands gli's idioms
   - add the archive/extract command (same as delete) 
+  - setup rspec for TDD
 
 
 
